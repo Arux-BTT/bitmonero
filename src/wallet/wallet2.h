@@ -182,7 +182,7 @@ namespace tools
      */
     crypto::secret_key generate(const std::string& wallet, const std::string& password,
       const crypto::secret_key& recovery_param = crypto::secret_key(), bool recover = false,
-      bool two_random = false);
+      bool two_random = false, size_t num_words=0);
     /*!
      * \brief Creates a watch only wallet from a public address and a view secret key.
      * \param  wallet_        Name of wallet file

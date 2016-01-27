@@ -81,7 +81,7 @@ namespace cryptonote
     void wallet_refresh_thread();
 
     bool new_wallet(const std::string &wallet_file, const std::string& password, const crypto::secret_key& recovery_key,
-        bool recover, bool two_random, bool testnet, const std::string &old_language);
+        bool recover, bool two_random, bool testnet, const std::string &old_language, size_t num_words);
     bool new_wallet(const std::string &wallet_file, const std::string& password, const cryptonote::account_public_address& address,
         const crypto::secret_key& viewkey, bool testnet);
     bool open_wallet(const std::string &wallet_file, const std::string& password, bool testnet);

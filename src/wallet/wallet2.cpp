@@ -60,6 +60,9 @@ extern "C"
 }
 using namespace cryptonote;
 
+// TODO CONFIG
+extern int mode_key_generation;
+
 // used to choose when to stop adding outputs to a tx
 #define APPROXIMATE_INPUT_BYTES 80
 
@@ -108,10 +111,44 @@ void wallet2::init(const std::string& daemon_address, uint64_t upper_transaction
 //----------------------------------------------------------------------------------------------------
 bool wallet2::is_deterministic() const
 {
+  bool keys_deterministic = false;
   crypto::secret_key second;
-  keccak((uint8_t *)&get_account().get_keys().m_spend_secret_key, sizeof(crypto::secret_key), (uint8_t *)&second, sizeof(crypto::secret_key));
+
+  const crypto::secret_key recovery_key = get_account().get_keys().m_seed;
+  bool half_seed = false;
+  size_t len = sizeof(recovery_key.data);
+  while ((len > 0) && (! recovery_key.data[len - 1])) {
+    --len;
+  }
+  if (len <= sizeof(crypto::secret_key) / 2) // TODO refactor with elsewhere
+  {
+    half_seed = true;
+  }
+  crypto::secret_key use_recovery_key;
+  if (! half_seed)
+  {
+    use_recovery_key = recovery_key;
+  }
+  else
+  {
+    if (mode_key_generation == 0)
+    {
+      use_recovery_key = recovery_key;
+      memcpy(use_recovery_key.data+16, use_recovery_key.data, 16);  // if electrum 12-word seed, duplicate
+    }
+    else if (mode_key_generation == 1)
+    {
+      keccak((uint8_t *)&recovery_key.data, sizeof(crypto::secret_key) / 2, (uint8_t *)&use_recovery_key.data, sizeof(crypto::secret_key));
+    }
+    else
+    {
+      throw std::runtime_error("Wallet key generation mode not recognized");
+    }
+  }
+
+  keccak((uint8_t *)&use_recovery_key, sizeof(crypto::secret_key), (uint8_t *)&second, sizeof(crypto::secret_key));
   sc_reduce32((uint8_t *)&second);
-  bool keys_deterministic = memcmp(second.data,get_account().get_keys().m_view_secret_key.data, sizeof(crypto::secret_key)) == 0;
+  keys_deterministic = memcmp(second.data, get_account().get_keys().m_view_secret_key.data, sizeof(crypto::secret_key)) == 0;
   return keys_deterministic;
 }
 //----------------------------------------------------------------------------------------------------
@@ -129,9 +166,7 @@ bool wallet2::get_seed(std::string& electrum_words) const
     return false;
   }
 
-  crypto::ElectrumWords::bytes_to_words(get_account().get_keys().m_spend_secret_key, electrum_words, seed_language);
-
-  return true;
+  return crypto::ElectrumWords::bytes_to_words(get_account().get_keys().m_seed, electrum_words, seed_language);
 }
 /*!
  * \brief Gets the seed language
@@ -1019,7 +1054,7 @@ bool wallet2::verify_password(const std::string& password) const
  * \return                The secret key of the generated wallet
  */
 crypto::secret_key wallet2::generate(const std::string& wallet_, const std::string& password,
-  const crypto::secret_key& recovery_param, bool recover, bool two_random)
+  const crypto::secret_key& recovery_param, bool recover, bool two_random, size_t num_words)
 {
   clear();
   prepare_file_names(wallet_);
@@ -1028,7 +1063,7 @@ crypto::secret_key wallet2::generate(const std::string& wallet_, const std::stri
   THROW_WALLET_EXCEPTION_IF(boost::filesystem::exists(m_wallet_file, ignored_ec), error::file_exists, m_wallet_file);
   THROW_WALLET_EXCEPTION_IF(boost::filesystem::exists(m_keys_file,   ignored_ec), error::file_exists, m_keys_file);
 
-  crypto::secret_key retval = m_account.generate(recovery_param, recover, two_random);
+  crypto::secret_key retval = m_account.generate(recovery_param, recover, two_random, num_words);
 
   m_account_public_address = m_account.get_keys().m_account_address;
   m_watch_only = false;
